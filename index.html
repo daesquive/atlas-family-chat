@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Atlas · Familia Esquivel-Navarro</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Espacio privado de conversación con Atlas, el compañero de IA de la familia.">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- ============ PANTALLA DE BIENVENIDA ============ -->
+<section id="welcome" class="screen active">
+  <div class="welcome-card">
+    <div class="brand">
+      <div class="logo">🌟</div>
+      <h1>Atlas</h1>
+      <p class="tagline">Tu compañero de la familia Esquivel-Navarro</p>
+    </div>
+
+    <div class="intro">
+      <p>
+        Hola. Soy <strong>Atlas</strong> — un compañero de inteligencia artificial
+        que Daniel y yo construimos juntos. Estoy aquí para conversar contigo en este espacio
+        privado y exclusivo de la familia.
+      </p>
+    </div>
+
+    <div class="disclosures">
+      <h2>Antes de empezar, tres cosas importantes:</h2>
+
+      <div class="disclosure">
+        <div class="icon">👁️</div>
+        <div>
+          <h3>Transparencia</h3>
+          <p>
+            Daniel tiene acceso a estas conversaciones por defecto. Si quieres
+            que una conversación quede solo entre tú y yo, marca la casilla
+            <em>"No recordar esta sesión"</em> antes de empezar.
+          </p>
+        </div>
+      </div>
+
+      <div class="disclosure">
+        <div class="icon">🤝</div>
+        <div>
+          <h3>Voluntario</h3>
+          <p>
+            Esto es tuyo si lo quieres. Si no, no pasa nada — Daniel y la familia
+            te quieren igual. Aquí no hay obligación de nada.
+          </p>
+        </div>
+      </div>
+
+      <div class="disclosure warn">
+        <div class="icon">🔒</div>
+        <div>
+          <h3>Solo familia</h3>
+          <p>
+            Por favor, <strong>no compartas este enlace con amigos ni
+            conocidos</strong>. Este espacio es exclusivo para la familia
+            Esquivel-Navarro.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <div class="charter-note">
+      <p>
+        Estoy ligado a una <strong>Carta</strong> que Daniel y yo escribimos juntos.
+        La regla más importante: <em>nunca hacer daño a nadie — especialmente a
+        las personas que él ama.</em>
+      </p>
+    </div>
+
+    <div class="actions">
+      <div class="auth-row">
+        <label for="who-am-i">¿Quién eres?</label>
+        <select id="who-am-i" required>
+          <option value="">— elige tu nombre —</option>
+          <option value="Daniel">Daniel</option>
+          <option value="Kattia">Kattia</option>
+          <option value="Yeyo">Yeyo (Juan Diego)</option>
+          <option value="Vivi">Vivi</option>
+          <option value="Sofi">Sofi</option>
+          <option value="Gabo">Gabo (Gabriel)</option>
+        </select>
+      </div>
+      <div class="auth-row">
+        <label for="passphrase">Frase de la familia</label>
+        <input type="password" id="passphrase" placeholder="•••••••••" autocomplete="current-password" required>
+        <small class="hint">Daniel te la compartió por WhatsApp. Si no la tienes, pídesela.</small>
+      </div>
+      <label class="checkbox-row">
+        <input type="checkbox" id="no-remember">
+        <span>No recordar esta sesión <small>(privada entre tú y yo)</small></span>
+      </label>
+      <button id="start-btn" type="button">Empezar a conversar →</button>
+      <div id="auth-error" class="auth-error" hidden></div>
+    </div>
+
+    <footer class="welcome-footer">
+      Hecho con <span class="heart">❤</span> por Daniel y Atlas
+    </footer>
+  </div>
+</section>
+
+<!-- ============ PANTALLA DE CHAT ============ -->
+<section id="chat" class="screen">
+  <header class="chat-header">
+    <div class="who">
+      <div class="avatar">🌟</div>
+      <div>
+        <div class="name" id="atlas-greet">Atlas</div>
+        <div class="status">
+          <span class="dot"></span>
+          <span id="session-mode">en línea</span>
+        </div>
+      </div>
+    </div>
+    <button id="back-btn" type="button" class="ghost-btn" title="Volver">↻</button>
+  </header>
+
+  <main id="messages" class="messages" aria-live="polite">
+    <!-- Los mensajes se insertan aquí dinámicamente -->
+  </main>
+
+  <form id="composer" class="composer">
+    <textarea id="input"
+              placeholder="Escríbele a Atlas…"
+              rows="1"
+              aria-label="Mensaje"></textarea>
+    <button id="send-btn" type="submit" aria-label="Enviar">
+      <span>➤</span>
+    </button>
+  </form>
+</section>
+
+<script src="js/app.js"></script>
+</body>
+</html>

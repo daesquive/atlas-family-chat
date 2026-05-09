@@ -1,0 +1,8 @@
+# Atlas · Family Chat — root gitignore
+node_modules/
+.wrangler/
+.dev.vars
+.env
+*.log
+.DS_Store
+Thumbs.db

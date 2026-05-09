@@ -1,0 +1,17 @@
+# Local dev secrets — copy to .dev.vars (which is gitignored).
+
+# Primary LLM provider (free):
+GITHUB_TOKEN=github_pat_...
+
+# Family passphrase (share via WhatsApp):
+FAMILY_PASSPHRASE=amor-de-familia-2026
+
+# Provider mode: 'auto' (recommended), 'github', or 'anthropic'
+LLM_PROVIDER=auto
+
+# Optional Anthropic fallback (only used if GitHub Models hits rate limit):
+# ANTHROPIC_API_KEY=sk-ant-api03-...
+
+# Tavily web search (free 1000/mo at https://tavily.com — sign up, copy key):
+# Without this, web_search tool is disabled and Atlas answers from training only.
+# TAVILY_API_KEY=tvly-...

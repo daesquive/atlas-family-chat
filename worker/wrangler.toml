@@ -1,0 +1,9 @@
+name = "atlas-family-chat"
+main = "src/worker.js"
+compatibility_date = "2025-01-01"
+
+# Free tier: 100,000 requests/day. Enough for the family forever.
+# After deploy: `wrangler secret put ANTHROPIC_API_KEY`
+
+[observability]
+enabled = true
