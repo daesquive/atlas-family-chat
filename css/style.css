@@ -302,3 +302,44 @@ html, body {
   .brand .logo { font-size: 48px; }
   .msg { max-width: 88%; font-size: 14px; }
 }
+
+/* ==================== Voice mode (mic + speak toggle) ==================== */
+.header-actions { display: flex; align-items: center; gap: 8px; }
+.header-actions .ghost-btn { font-size: 14px; }
+.header-actions #speak-toggle.on {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.composer .mic-btn {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 184, 107, 0.35);
+  background: rgba(255, 184, 107, 0.08);
+  color: var(--accent);
+  font-size: 18px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background .15s, border-color .15s, transform .12s, box-shadow .15s;
+}
+.composer .mic-btn:hover {
+  background: rgba(255, 184, 107, 0.18);
+  border-color: var(--accent);
+}
+.composer .mic-btn:active { transform: translateY(1px); }
+.composer .mic-btn:disabled { cursor: not-allowed; }
+
+.composer .mic-btn.listening {
+  background: linear-gradient(135deg, #ff5b6b, #ff8c42);
+  border-color: transparent;
+  color: #fff;
+  animation: mic-pulse 1.2s ease-in-out infinite;
+}
+@keyframes mic-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 91, 107, 0.55); }
+  50%      { box-shadow: 0 0 0 10px rgba(255, 91, 107, 0); }
+}

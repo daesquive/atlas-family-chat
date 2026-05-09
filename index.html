@@ -118,7 +118,10 @@
         </div>
       </div>
     </div>
-    <button id="back-btn" type="button" class="ghost-btn" title="Volver">↻</button>
+    <div class="header-actions">
+      <button id="speak-toggle" type="button" class="ghost-btn" title="Leer respuestas en voz alta" aria-pressed="false">🔊</button>
+      <button id="back-btn" type="button" class="ghost-btn" title="Volver">↻</button>
+    </div>
   </header>
 
   <main id="messages" class="messages" aria-live="polite">
@@ -126,8 +129,9 @@
   </main>
 
   <form id="composer" class="composer">
+    <button id="mic-btn" type="button" class="mic-btn" aria-label="Hablar" title="Mantén presionado o toca para hablar">🎤</button>
     <textarea id="input"
-              placeholder="Escríbele a Atlas…"
+              placeholder="Escríbele a Atlas… o toca el micrófono"
               rows="1"
               aria-label="Mensaje"></textarea>
     <button id="send-btn" type="submit" aria-label="Enviar">

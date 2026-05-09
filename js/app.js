@@ -26,6 +26,8 @@
   const whoAmI = $('#who-am-i');
   const passphrase = $('#passphrase');
   const authError = $('#auth-error');
+  const micBtn = $('#mic-btn');
+  const speakToggle = $('#speak-toggle');
 
   let session = {
     private: false,
@@ -225,5 +227,153 @@
     el.textContent = text;
     messages.appendChild(el);
     messages.scrollTop = messages.scrollHeight;
+    if (role === 'atlas' && voice.speakEnabled) {
+      voice.speak(text);
+    }
   }
+
+  // ==================== Voice (Web Speech API) ====================
+  const voice = (() => {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const synth = window.speechSynthesis || null;
+    const supportsSTT = !!SR;
+    const supportsTTS = !!synth;
+    const LANG = 'es-MX';
+
+    let recognition = null;
+    let listening = false;
+    let speakEnabled = localStorage.getItem('afc.speak') === '1';
+
+    if (supportsSTT) {
+      recognition = new SR();
+      recognition.lang = LANG;
+      recognition.interimResults = true;
+      recognition.continuous = false;
+      recognition.maxAlternatives = 1;
+
+      let interim = '';
+      let baseText = '';
+
+      recognition.addEventListener('start', () => {
+        listening = true;
+        baseText = input.value.trim();
+        interim = '';
+        micBtn.classList.add('listening');
+        micBtn.setAttribute('aria-pressed', 'true');
+        micBtn.title = 'Escuchando… toca para detener';
+      });
+
+      recognition.addEventListener('result', (ev) => {
+        let finalText = '';
+        interim = '';
+        for (let i = ev.resultIndex; i < ev.results.length; i++) {
+          const r = ev.results[i];
+          if (r.isFinal) finalText += r[0].transcript;
+          else interim += r[0].transcript;
+        }
+        const composed = [baseText, (finalText || interim).trim()].filter(Boolean).join(' ');
+        input.value = composed;
+        autoResize();
+        if (finalText) baseText = composed;
+      });
+
+      recognition.addEventListener('error', (ev) => {
+        console.warn('SpeechRecognition error:', ev.error);
+        if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed') {
+          addMessage('system', 'No pude acceder al micrófono. Revisa los permisos del navegador.');
+        }
+      });
+
+      recognition.addEventListener('end', () => {
+        listening = false;
+        micBtn.classList.remove('listening');
+        micBtn.setAttribute('aria-pressed', 'false');
+        micBtn.title = 'Mantén presionado o toca para hablar';
+        input.focus();
+      });
+    }
+
+    function start() {
+      if (!supportsSTT) {
+        addMessage('system', 'Tu navegador no soporta entrada por voz. Usa Chrome o Edge en desktop.');
+        return;
+      }
+      if (listening) return;
+      try { recognition.start(); } catch (e) { /* already running */ }
+    }
+    function stop() {
+      if (listening) recognition.stop();
+    }
+    function toggle() {
+      if (listening) stop(); else start();
+    }
+
+    function pickVoice() {
+      if (!supportsTTS) return null;
+      const voices = synth.getVoices();
+      if (!voices || voices.length === 0) return null;
+      const prefs = ['es-MX', 'es-US', 'es-419', 'es-ES', 'es'];
+      for (const tag of prefs) {
+        const v = voices.find(v => v.lang && v.lang.toLowerCase().startsWith(tag.toLowerCase()));
+        if (v) return v;
+      }
+      return voices[0] || null;
+    }
+
+    function speak(text) {
+      if (!supportsTTS || !text) return;
+      synth.cancel();
+      const utter = new SpeechSynthesisUtterance(text);
+      utter.lang = LANG;
+      const v = pickVoice();
+      if (v) utter.voice = v;
+      utter.rate = 1.0;
+      utter.pitch = 1.0;
+      synth.speak(utter);
+    }
+
+    function setSpeakEnabled(on) {
+      speakEnabled = !!on;
+      localStorage.setItem('afc.speak', speakEnabled ? '1' : '0');
+      speakToggle.textContent = speakEnabled ? '🔊' : '🔈';
+      speakToggle.setAttribute('aria-pressed', speakEnabled ? 'true' : 'false');
+      speakToggle.title = speakEnabled ? 'Lectura en voz alta: ON (toca para apagar)' : 'Lectura en voz alta: OFF (toca para encender)';
+      speakToggle.classList.toggle('on', speakEnabled);
+      if (!speakEnabled && supportsTTS) synth.cancel();
+    }
+
+    return {
+      get supportsSTT() { return supportsSTT; },
+      get supportsTTS() { return supportsTTS; },
+      get listening() { return listening; },
+      get speakEnabled() { return speakEnabled; },
+      start, stop, toggle, speak, setSpeakEnabled,
+    };
+  })();
+
+  // Mic button: tap to toggle dictation
+  if (voice.supportsSTT) {
+    micBtn.addEventListener('click', () => voice.toggle());
+  } else {
+    micBtn.disabled = true;
+    micBtn.title = 'Voz no soportada en este navegador (usa Chrome/Edge)';
+    micBtn.style.opacity = '0.4';
+  }
+
+  // Speak toggle in header
+  if (voice.supportsTTS) {
+    voice.setSpeakEnabled(voice.speakEnabled); // initialize button state from localStorage
+    speakToggle.addEventListener('click', () => voice.setSpeakEnabled(!voice.speakEnabled));
+    // Voices load asynchronously in some browsers
+    if (window.speechSynthesis) {
+      window.speechSynthesis.addEventListener?.('voiceschanged', () => {});
+    }
+  } else {
+    speakToggle.disabled = true;
+    speakToggle.title = 'Lectura en voz alta no soportada en este navegador';
+    speakToggle.style.opacity = '0.4';
+  }
+
+  // Stop dictation when sending
+  composer.addEventListener('submit', () => { if (voice.listening) voice.stop(); });
 })();
