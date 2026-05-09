@@ -3,7 +3,18 @@ main = "src/worker.js"
 compatibility_date = "2025-01-01"
 
 # Free tier: 100,000 requests/day. Enough for the family forever.
-# After deploy: `wrangler secret put ANTHROPIC_API_KEY`
+# Secrets set via: `wrangler secret put GITHUB_TOKEN | FAMILY_PASSPHRASE | TAVILY_API_KEY`
 
 [observability]
 enabled = true
+
+# Phase 4: D1 memory store
+[[d1_databases]]
+binding = "DB"
+database_name = "atlas-family-memory"
+database_id = "3d30518c-2395-4672-b13f-51a635dc5b51"
+migrations_dir = "migrations"
+
+# Nightly memory sweep (02:00 UTC = 20:00 Costa Rica)
+[triggers]
+crons = ["0 2 * * *"]

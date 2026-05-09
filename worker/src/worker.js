@@ -1,9 +1,14 @@
 // Atlas · Family Chat — Cloudflare Worker
-// Phase 3.5: identity + passphrase + multi-provider LLM (GitHub Models free, Anthropic fallback).
+// Phase 4: identity + passphrase + multi-provider LLM + Tavily web search + D1 memory.
 
 import { SYSTEM_PROMPT } from './system-prompt.js';
 import { callLLM, MODELS } from './providers.js';
 import { TOOLS, executeTool } from './tools.js';
+import {
+  writeMessage, recallMemories, renderRecallSection,
+  extractFacts, storeFacts, sweepExpired,
+  adminListMessages, adminListMemories, adminForgetFact,
+} from './memory.js';
 
 const FAMILY_ROSTER = new Set(['Daniel', 'Kattia', 'Yeyo', 'Vivi', 'Sofi', 'Gabo']);
 
@@ -17,8 +22,8 @@ function corsHeaders(origin) {
   const allow = ALLOWED_ORIGINS.has(origin) ? origin : 'http://localhost:8000';
   return {
     'Access-Control-Allow-Origin': allow,
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, X-Family-Passphrase, X-Family-User',
     'Access-Control-Max-Age': '86400',
     'Vary': 'Origin',
   };
@@ -45,7 +50,7 @@ function checkPassphrase(provided, env) {
 }
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const origin = request.headers.get('Origin') || '';
 
     if (request.method === 'OPTIONS') {
@@ -64,7 +69,13 @@ export default {
         anthropic_key_set: !!env.ANTHROPIC_API_KEY,
         passphrase_set: !!env.FAMILY_PASSPHRASE,
         web_search_enabled: !!env.TAVILY_API_KEY,
+        memory_enabled: !!env.DB,
       }, 200, origin);
+    }
+
+    // ----- /api/admin/* : Daniel-only (gated by name + passphrase) -----
+    if (url.pathname.startsWith('/api/admin/')) {
+      return handleAdmin(url, request, env, origin);
     }
 
     // ----- /api/verify : passphrase check (used by login screen) -----
@@ -115,10 +126,17 @@ export default {
 
     const userHint = `\n\nLa persona con quien estás hablando se identifica como: **${user}**. Trátala con la calidez y el conocimiento que tengas de ella en la sección "LA FAMILIA QUE CONOCES".`;
     const privacyHint = isPrivate
-      ? '\n\nNOTA DE PRIVACIDAD: Esta sesión es privada. Daniel NO verá esta conversación. Respeta esa confidencialidad.'
+      ? '\n\nNOTA DE PRIVACIDAD: Esta sesión es privada. Daniel NO verá esta conversación, y NO se guardará en memoria. Respeta esa confidencialidad — no prometas recordar nada.'
       : '';
 
-    const system = SYSTEM_PROMPT + userHint + privacyHint;
+    // ---- Phase 4: Recall memories for this user (skipped in private mode) ----
+    let recallSection = '';
+    if (!isPrivate) {
+      const memories = await recallMemories(env, user, 25);
+      recallSection = renderRecallSection(user, memories);
+    }
+
+    const system = SYSTEM_PROMPT + userHint + privacyHint + recallSection;
 
     // ---- Tool-calling loop ----
     // The model can request web_search. We execute it server-side, feed results
@@ -157,11 +175,94 @@ export default {
       // loop again so the model can read the results and reply
     }
 
+    const finalReply = (lastResult && lastResult.reply) || '(Atlas no devolvió texto. Intenta de nuevo.)';
+
+    // ---- Phase 4: persist + extract memories (fire-and-forget, non-blocking) ----
+    if (!isPrivate && env.DB) {
+      const lastUserMsg = cleaned.filter(m => m.role === 'user').pop();
+      ctx.waitUntil((async () => {
+        try {
+          const userMsgId = lastUserMsg
+            ? await writeMessage(env, { user, role: 'user', content: lastUserMsg.content, isPrivate: false })
+            : null;
+          await writeMessage(env, { user, role: 'assistant', content: finalReply, isPrivate: false });
+          if (lastUserMsg) {
+            const facts = await extractFacts(env, { user, message: lastUserMsg.content, callLLMFn: callLLM });
+            if (facts.length > 0) {
+              await storeFacts(env, { user, facts, sourceMessageId: userMsgId });
+            }
+          }
+        } catch (err) {
+          console.error('memory pipeline failed', err);
+        }
+      })());
+    }
+
     return jsonResponse({
-      reply: (lastResult && lastResult.reply) || '(Atlas no devolvió texto. Intenta de nuevo.)',
+      reply: finalReply,
       model: lastResult && lastResult.model,
       provider: lastResult && lastResult.provider,
       usage: lastResult && lastResult.usage,
     }, 200, origin);
   },
+
+  // Nightly cron: sweep expired memories + old messages.
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil((async () => {
+      const result = await sweepExpired(env);
+      console.log('Nightly sweep complete', result);
+    })());
+  },
 };
+
+// =================== Admin endpoints (Daniel-only) ===================
+// Auth: requires X-Family-Passphrase header AND X-Family-User: Daniel.
+// Endpoints:
+//   GET  /api/admin/history?user=X&limit=N      -> list recent messages
+//   GET  /api/admin/memories?user=X             -> list active memories
+//   POST /api/admin/forget   {fact_id}          -> delete one memory
+//   POST /api/admin/sweep                       -> manual sweep trigger
+
+async function handleAdmin(url, request, env, origin) {
+  const provided = request.headers.get('X-Family-Passphrase');
+  const whoHeader = request.headers.get('X-Family-User');
+  if (!checkPassphrase(provided, env) || whoHeader !== 'Daniel') {
+    return jsonResponse({ error: 'Forbidden' }, 403, origin);
+  }
+  if (!env.DB) {
+    return jsonResponse({ error: 'Memory store not configured' }, 503, origin);
+  }
+
+  const path = url.pathname.replace(/^\/api\/admin\//, '');
+
+  if (path === 'history' && request.method === 'GET') {
+    const user = url.searchParams.get('user');
+    const limit = parseInt(url.searchParams.get('limit') || '100', 10);
+    if (!user || !FAMILY_ROSTER.has(user)) return jsonResponse({ error: 'Bad user' }, 400, origin);
+    const rows = await adminListMessages(env, { user, limit });
+    return jsonResponse({ user, count: rows.length, messages: rows }, 200, origin);
+  }
+
+  if (path === 'memories' && request.method === 'GET') {
+    const user = url.searchParams.get('user');
+    if (!user || !FAMILY_ROSTER.has(user)) return jsonResponse({ error: 'Bad user' }, 400, origin);
+    const rows = await adminListMemories(env, { user });
+    return jsonResponse({ user, count: rows.length, memories: rows }, 200, origin);
+  }
+
+  if (path === 'forget' && request.method === 'POST') {
+    let body;
+    try { body = await request.json(); } catch { return jsonResponse({ error: 'Invalid JSON' }, 400, origin); }
+    const factId = parseInt(body && body.fact_id, 10);
+    if (!Number.isFinite(factId)) return jsonResponse({ error: 'fact_id required' }, 400, origin);
+    const r = await adminForgetFact(env, { factId });
+    return jsonResponse(r, r.ok ? 200 : 500, origin);
+  }
+
+  if (path === 'sweep' && request.method === 'POST') {
+    const r = await sweepExpired(env);
+    return jsonResponse(r, 200, origin);
+  }
+
+  return jsonResponse({ error: 'Unknown admin route' }, 404, origin);
+}
