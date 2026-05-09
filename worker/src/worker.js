@@ -7,7 +7,7 @@ import { TOOLS, executeTool } from './tools.js';
 import {
   writeMessage, recallMemories, renderRecallSection,
   extractFacts, storeFacts, sweepExpired,
-  adminListMessages, adminListMemories, adminForgetFact,
+  getStats, adminListMessages, adminListMemories, adminForgetFact,
 } from './memory.js';
 
 const FAMILY_ROSTER = new Set(['Daniel', 'Kattia', 'Yeyo', 'Vivi', 'Sofi', 'Gabo']);
@@ -222,6 +222,7 @@ export default {
 //   GET  /api/admin/memories?user=X             -> list active memories
 //   POST /api/admin/forget   {fact_id}          -> delete one memory
 //   POST /api/admin/sweep                       -> manual sweep trigger
+//   GET  /api/admin/stats                       -> aggregate dashboard stats
 
 async function handleAdmin(url, request, env, origin) {
   const provided = request.headers.get('X-Family-Passphrase');
@@ -262,6 +263,10 @@ async function handleAdmin(url, request, env, origin) {
   if (path === 'sweep' && request.method === 'POST') {
     const r = await sweepExpired(env);
     return jsonResponse(r, 200, origin);
+  }
+
+  if (path === 'stats' && request.method === 'GET') {
+    return jsonResponse(await getStats(env), 200, origin);
   }
 
   return jsonResponse({ error: 'Unknown admin route' }, 404, origin);

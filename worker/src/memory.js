@@ -192,6 +192,67 @@ export async function sweepExpired(env) {
 }
 
 /**
+ * Daniel-only admin: aggregate non-private dashboard stats.
+ */
+export async function getStats(env) {
+  const empty = {
+    messages: { last_24h: 0, last_7d: 0, all_time: 0 },
+    active_users: { last_24h: 0, last_7d: 0 },
+    memories: {
+      active: 0,
+      by_tier: { evergreen: 0, long_term: 0, seasonal: 0, ephemeral: 0 },
+    },
+    last_message_at: null,
+  };
+  if (!hasDB(env)) return empty;
+
+  const t = Math.floor(Date.now() / 1000);
+  const last24h = t - 24 * 60 * 60;
+  const last7d = t - 7 * 24 * 60 * 60;
+  try {
+    const row = await env.DB.prepare(
+      `SELECT
+        (SELECT COUNT(*) FROM messages WHERE is_private = 0 AND (CASE WHEN created_at > 9999999999 THEN CAST(created_at / 1000 AS INTEGER) ELSE created_at END) >= ?) AS messages_last_24h,
+        (SELECT COUNT(*) FROM messages WHERE is_private = 0 AND (CASE WHEN created_at > 9999999999 THEN CAST(created_at / 1000 AS INTEGER) ELSE created_at END) >= ?) AS messages_last_7d,
+        (SELECT COUNT(*) FROM messages WHERE is_private = 0) AS messages_all_time,
+        (SELECT COUNT(DISTINCT user) FROM messages WHERE is_private = 0 AND (CASE WHEN created_at > 9999999999 THEN CAST(created_at / 1000 AS INTEGER) ELSE created_at END) >= ?) AS active_users_last_24h,
+        (SELECT COUNT(DISTINCT user) FROM messages WHERE is_private = 0 AND (CASE WHEN created_at > 9999999999 THEN CAST(created_at / 1000 AS INTEGER) ELSE created_at END) >= ?) AS active_users_last_7d,
+        (SELECT COUNT(*) FROM memories WHERE superseded_at IS NULL AND (expires_at IS NULL OR (CASE WHEN expires_at > 9999999999 THEN CAST(expires_at / 1000 AS INTEGER) ELSE expires_at END) > ?)) AS memories_active,
+        (SELECT COUNT(*) FROM memories WHERE tier = 'evergreen' AND superseded_at IS NULL AND (expires_at IS NULL OR (CASE WHEN expires_at > 9999999999 THEN CAST(expires_at / 1000 AS INTEGER) ELSE expires_at END) > ?)) AS memories_evergreen,
+        (SELECT COUNT(*) FROM memories WHERE tier = 'long_term' AND superseded_at IS NULL AND (expires_at IS NULL OR (CASE WHEN expires_at > 9999999999 THEN CAST(expires_at / 1000 AS INTEGER) ELSE expires_at END) > ?)) AS memories_long_term,
+        (SELECT COUNT(*) FROM memories WHERE tier = 'seasonal' AND superseded_at IS NULL AND (expires_at IS NULL OR (CASE WHEN expires_at > 9999999999 THEN CAST(expires_at / 1000 AS INTEGER) ELSE expires_at END) > ?)) AS memories_seasonal,
+        (SELECT COUNT(*) FROM memories WHERE tier = 'ephemeral' AND superseded_at IS NULL AND (expires_at IS NULL OR (CASE WHEN expires_at > 9999999999 THEN CAST(expires_at / 1000 AS INTEGER) ELSE expires_at END) > ?)) AS memories_ephemeral,
+        (SELECT MAX(CASE WHEN created_at > 9999999999 THEN CAST(created_at / 1000 AS INTEGER) ELSE created_at END) FROM messages WHERE is_private = 0) AS last_message_at`
+    ).bind(last24h, last7d, last24h, last7d, t, t, t, t, t).first();
+
+    return {
+      messages: {
+        last_24h: row.messages_last_24h || 0,
+        last_7d: row.messages_last_7d || 0,
+        all_time: row.messages_all_time || 0,
+      },
+      active_users: {
+        last_24h: row.active_users_last_24h || 0,
+        last_7d: row.active_users_last_7d || 0,
+      },
+      memories: {
+        active: row.memories_active || 0,
+        by_tier: {
+          evergreen: row.memories_evergreen || 0,
+          long_term: row.memories_long_term || 0,
+          seasonal: row.memories_seasonal || 0,
+          ephemeral: row.memories_ephemeral || 0,
+        },
+      },
+      last_message_at: row.last_message_at == null ? null : row.last_message_at,
+    };
+  } catch (err) {
+    console.error('getStats failed', err);
+    return empty;
+  }
+}
+
+/**
  * Daniel-only admin: list recent messages for a given user.
  */
 export async function adminListMessages(env, { user, limit = 100 }) {
